@@ -17,8 +17,7 @@
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         /** * CONFIGURACIÓN PARA GITHUB:
-         * Para que el modo docente funcione en GitHub, debes pegar aquí el objeto 
-         * de configuración que te da Firebase (Project Settings > General).
+         * Si deseas que los datos se guarden permanentemente, pega aquí tu objeto de Firebase.
          */
         const manualFirebaseConfig = null; 
 
@@ -26,7 +25,7 @@
         try {
             firebaseConfig = manualFirebaseConfig || JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         } catch (e) {
-            console.error("No se pudo cargar la configuración de Firebase.");
+            console.error("Entorno sin configuración automática de Firebase.");
         }
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
@@ -46,7 +45,7 @@
                         await signInAnonymously(auth);
                     }
                 } catch (e) {
-                    console.error("Error en autenticación silenciosa:", e);
+                    console.error("Error en autenticación:", e);
                 }
             };
             initAuth();
@@ -55,9 +54,10 @@
                 window.isCloudReady = true;
             });
         } else {
+            // Fallback para GitHub: No hay nube, pero permitimos flujo local
             window.cloud = null;
-            window.isCloudReady = true; // Liberar bloqueo aunque no haya nube
-            console.warn("Firebase no detectado. El modo docente requiere configuración manual para GitHub.");
+            window.isCloudReady = true; 
+            console.warn("Ejecutando en Modo de Sesión (Sin persistencia en la nube).");
         }
     </script>
 
@@ -108,12 +108,12 @@
         <div class="bg-slate-800 border-2 border-indigo-500 p-6 rounded-3xl shadow-2xl w-80 text-center text-white">
             <h3 class="header-font text-xl mb-2 uppercase text-white">Acceso Docente</h3>
             
-            <div id="firebase-alert" class="hidden mb-4 p-3 bg-red-900/50 border border-red-500 rounded-xl">
-                <p class="text-[9px] font-bold uppercase text-red-200">⚠️ Error de Configuración</p>
-                <p class="text-[8px] text-red-300">Firebase no configurado. Edita el código para habilitar la nube en GitHub.</p>
+            <div id="offline-notice" class="hidden mb-4 p-3 bg-yellow-900/40 border border-yellow-600 rounded-xl">
+                <p class="text-[9px] font-bold uppercase text-yellow-200">ℹ️ Modo Sesión (Sin Nube)</p>
+                <p class="text-[8px] text-yellow-300">Cualquier clave funciona. Los cambios no se guardarán al recargar.</p>
             </div>
 
-            <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Inicia sesión para editar criterios</p>
+            <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Identifícate para editar criterios</p>
             <div class="space-y-3 mb-4">
                 <input type="text" id="docente-user-input" class="w-full student-input text-center" placeholder="Usuario">
                 <input type="password" id="docente-pass-input" class="w-full student-input text-center" placeholder="Clave">
@@ -157,12 +157,10 @@
         <!-- Alumno / Grado Swapped -->
         <div class="p-6 md:px-10 bg-white/5 border-b border-white/10 flex flex-col md:flex-row items-center justify-center gap-8 text-white">
             <div class="flex flex-col md:flex-row items-center gap-4 md:gap-12">
-                <!-- Grado y Curso a la izquierda -->
                 <div class="flex flex-row items-center justify-center border-r border-white/10 pr-4 md:pr-12 min-w-[150px] gap-3">
                     <span id="display-grade" class="header-font text-5xl text-yellow-400">1º</span>
                     <span id="display-course" class="header-font text-3xl text-white uppercase">EBI</span>
                 </div>
-                <!-- Nombre y Apellido a la derecha -->
                 <div class="flex gap-4">
                     <div class="w-24 md:w-32">
                         <label class="block text-[9px] uppercase font-black text-indigo-300 mb-1 ml-1">Nombre</label>
@@ -189,8 +187,12 @@
                 <tbody id="criteria-list"></tbody>
             </table>
 
-            <!-- Controles de Edición Docente -->
+            <!-- Controles de Edición Docente (Reorganizado) -->
             <div id="master-controls" class="hidden no-print mt-6 flex flex-col gap-6 border-t border-white/10 pt-6">
+                <div id="sync-warning" class="hidden bg-yellow-500/10 border border-yellow-500/50 p-3 rounded-xl mb-4 text-center">
+                    <p class="text-[10px] text-yellow-200 uppercase font-bold tracking-widest">⚠️ Modo Sesión: Los cambios no se sincronizarán en la nube.</p>
+                </div>
+                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-white">
                     <div class="bg-black/20 p-5 rounded-3xl border border-indigo-500/10 space-y-4">
                         <h4 class="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] border-b border-white/5 pb-2">Configuración IA</h4>
@@ -334,11 +336,11 @@
             const btn = document.getElementById('login-btn');
             if(btn) { btn.disabled = false; btn.innerText = "Entrar"; }
             
-            const alertBox = document.getElementById('firebase-alert');
+            const infoBox = document.getElementById('offline-notice');
             if (!window.cloud) {
-                alertBox.classList.remove('hidden');
+                infoBox.classList.remove('hidden');
             } else {
-                alertBox.classList.add('hidden');
+                infoBox.classList.add('hidden');
             }
             
             document.getElementById('password-modal').classList.remove('hidden');
@@ -353,19 +355,22 @@
         };
 
         window.checkPass = async function() {
-            const user = document.getElementById('docente-user-input').value.trim().toLowerCase();
+            const user = document.getElementById('docente-user-input').value.trim();
             const pass = document.getElementById('docente-pass-input').value.trim();
             const btn = document.getElementById('login-btn');
             
             if (!user || !pass) return;
 
+            btn.disabled = true; btn.innerText = "⏳ Verificando...";
+
+            // LÓGICA DE GITHUB (SIN NUBE)
             if (!window.cloud) {
-                window.showToast("❌ Error: Firebase no configurado.");
+                window.loginSuccess(user || "Docente Temporal", appData);
+                window.showToast("🚀 Modo Sesión: Edita libremente, exporta a Excel o Imprime.");
                 return;
             }
 
-            btn.disabled = true; btn.innerText = "⏳ Verificando...";
-
+            // LÓGICA DE NUBE (CANVAS)
             try {
                 if (!window.isCloudReady) {
                     await new Promise(r => {
@@ -375,7 +380,7 @@
                     });
                 }
                 
-                const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', user);
+                const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', user.toLowerCase());
                 const snapshot = await window.cloud.getDoc(docPath);
                 
                 if (snapshot.exists()) {
@@ -419,9 +424,13 @@
             const userBtn = document.getElementById('mode-user-btn');
             const masterBtn = document.getElementById('mode-master-btn');
             const masterControls = document.getElementById('master-controls');
+            const syncWarning = document.getElementById('sync-warning');
+
             if (userBtn) userBtn.classList.toggle('bg-indigo-600', !isMasterMode);
             if (masterBtn) masterBtn.classList.toggle('bg-red-600', isMasterMode);
             if (masterControls) masterControls.classList.toggle('hidden', !isMasterMode);
+            if (syncWarning) syncWarning.classList.toggle('hidden', !(!window.cloud && isMasterMode));
+            
             window.render();
         };
 
@@ -492,7 +501,24 @@
         };
 
         window.saveChanges = async () => {
-            if (!window.cloud) return;
+            if (!window.cloud) {
+                window.showToast("⚠️ Modo Sesión: Los cambios se mantienen solo mientras la pestaña esté abierta.");
+                // Actualizar visualmente
+                appData.title = document.getElementById('edit-title').value;
+                appData.maxGrade = parseInt(document.getElementById('edit-max-grade-select').value);
+                appData.grade = document.getElementById('edit-grade-select').value;
+                appData.courseType = document.getElementById('edit-course-select').value;
+                appData.geminiKey = document.getElementById('edit-api-key').value.trim();
+                appData.aiEngine = document.getElementById('edit-ai-engine').value;
+                appData.criteria.forEach((item, i) => {
+                    const textInput = document.getElementById(`text-${i}`);
+                    const valInput = document.getElementById(`val-${i}`);
+                    if (textInput) item.text = textInput.value;
+                    if (valInput) item.val = parseFloat(valInput.value);
+                });
+                window.render();
+                return;
+            }
             const btn = document.getElementById('save-btn');
             if (btn) { btn.disabled = true; btn.innerText = "⏳ Guardando..."; }
             appData.title = document.getElementById('edit-title').value;
@@ -508,7 +534,7 @@
                 if (valInput) item.val = parseFloat(valInput.value);
             });
             try {
-                const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', currentDocente);
+                const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', currentDocente.toLowerCase());
                 await window.cloud.setDoc(docPath, { config: appData }, { merge: true });
                 window.showToast("✅ Configuración guardada en la nube.");
                 window.render();
