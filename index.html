@@ -26,7 +26,7 @@
         try {
             firebaseConfig = manualFirebaseConfig || JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         } catch (e) {
-            console.error("Version libre test.");
+            console.error("FVersion libre test.");
         }
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
@@ -57,7 +57,7 @@
                 
                 // Intentar recuperar sesión de docente si existía
                 const lastUser = sessionStorage.getItem('last_docente_user');
-                if (lastUser && !isMasterMode) {
+                if (lastUser && !window.isMasterMode) {
                     console.log("Recuperando sesión previa de:", lastUser);
                     try {
                         const docPath = doc(db, 'artifacts', appId, 'public', 'data', 'docentes', lastUser.toLowerCase());
@@ -124,8 +124,8 @@
             <h3 class="header-font text-xl mb-2 uppercase text-white">Acceso Docente</h3>
             
             <div id="offline-notice" class="hidden mb-4 p-3 bg-yellow-900/40 border border-yellow-600 rounded-xl">
-                <p class="text-[9px] font-bold uppercase text-yellow-200"> Modo Sesión Libre</p>
-                <p class="text-[8px] text-yellow-300">los datos se perderán al recargar la página.</p>
+                <p class="text-[9px] font-bold uppercase text-yellow-200">ℹ️ Modo Sesión (Sin Nube)</p>
+                <p class="text-[8px] text-yellow-300">Sin Firebase, los datos se perderán al recargar. Configura Firebase para guardarlos.</p>
             </div>
 
             <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Identifícate para editar criterios</p>
@@ -169,13 +169,10 @@
             </div>
         </div>
 
-        <!-- Alumno / Grado Swapped -->
+        <!-- Alumno / Grado Swapped Logic -->
         <div class="p-6 md:px-10 bg-white/5 border-b border-white/10 flex flex-col md:flex-row items-center justify-center gap-8 text-white">
             <div class="flex flex-col md:flex-row items-center gap-4 md:gap-12">
-                <div class="flex flex-row items-center justify-center border-r border-white/10 pr-4 md:pr-12 min-w-[150px] gap-3">
-                    <span id="display-grade" class="header-font text-5xl text-yellow-400">1º</span>
-                    <span id="display-course" class="header-font text-3xl text-white uppercase">EBI</span>
-                </div>
+                <!-- Swapped: Alumno Inputs first (Left) -->
                 <div class="flex gap-4">
                     <div class="w-24 md:w-32">
                         <label class="block text-[9px] uppercase font-black text-indigo-300 mb-1 ml-1">Nombre</label>
@@ -185,6 +182,11 @@
                         <label class="block text-[9px] uppercase font-black text-indigo-300 mb-1 ml-1">Apellido</label>
                         <input type="text" id="student-surname" placeholder="Apellido" class="student-input w-full text-[11px] py-1.5 shadow-inner">
                     </div>
+                </div>
+                <!-- Swapped: Grado y Curso second (Right) -->
+                <div class="flex flex-row items-center justify-center border-l border-white/10 pl-4 md:pl-12 min-w-[150px] gap-3">
+                    <span id="display-grade" class="header-font text-5xl text-yellow-400">1º</span>
+                    <span id="display-course" class="header-font text-3xl text-white uppercase">EBI</span>
                 </div>
             </div>
         </div>
@@ -337,7 +339,7 @@
             ]
         };
         let userProgress = [];
-        let isMasterMode = false;
+        window.isMasterMode = false;
         let indexToDelete = -1;
         let currentDocente = null;
 
@@ -424,14 +426,14 @@
             currentDocente = user;
             appData = { ...appData, ...config };
             userProgress = new Array(appData.criteria.length).fill(false);
-            isMasterMode = true;
+            window.isMasterMode = true;
             window.updateUI();
             window.closePassModal();
             window.showToast(`🔓 Sesión activa: ${user}`);
         };
 
         window.changeToUser = () => { 
-            isMasterMode = false; 
+            window.isMasterMode = false; 
             currentDocente = null; 
             sessionStorage.removeItem('last_docente_user');
             window.updateUI(); 
@@ -444,26 +446,26 @@
             const masterControls = document.getElementById('master-controls');
             const syncWarning = document.getElementById('sync-warning');
 
-            if (userBtn) userBtn.classList.toggle('bg-indigo-600', !isMasterMode);
-            if (masterBtn) masterBtn.classList.toggle('bg-red-600', isMasterMode);
-            if (masterControls) masterControls.classList.toggle('hidden', !isMasterMode);
-            if (syncWarning) syncWarning.classList.toggle('hidden', !(!window.cloud && isMasterMode));
+            if (userBtn) userBtn.classList.toggle('bg-indigo-600', !window.isMasterMode);
+            if (masterBtn) masterBtn.classList.toggle('bg-red-600', window.isMasterMode);
+            if (masterControls) masterControls.classList.toggle('hidden', !window.isMasterMode);
+            if (syncWarning) syncWarning.classList.toggle('hidden', !(!window.cloud && window.isMasterMode));
             
             window.render();
         };
 
         window.render = function() {
             const titleEl = document.getElementById('app-title');
-            if (titleEl) titleEl.innerHTML = isMasterMode ? `<input type="text" value="${appData.title}" id="edit-title" class="bg-transparent w-full text-center border-none outline-none">` : appData.title;
+            if (titleEl) titleEl.innerHTML = window.isMasterMode ? `<input type="text" value="${appData.title}" id="edit-title" class="bg-transparent w-full text-center border-none outline-none">` : appData.title;
             
             document.getElementById('display-grade').innerText = appData.grade || "1º";
             document.getElementById('display-course').innerText = appData.courseType || "EBI";
             document.getElementById('grade-scale-display').innerText = `(Esc: 1 al ${appData.maxGrade})`;
             
             const vHeader = document.getElementById('val-header');
-            if (vHeader) vHeader.style.display = isMasterMode ? 'table-cell' : 'none';
+            if (vHeader) vHeader.style.display = window.isMasterMode ? 'table-cell' : 'none';
             
-            if (isMasterMode) {
+            if (window.isMasterMode) {
                 document.getElementById('edit-max-grade-select').value = appData.maxGrade;
                 document.getElementById('edit-grade-select').value = appData.grade;
                 document.getElementById('edit-course-select').value = appData.courseType;
@@ -476,13 +478,13 @@
                 list.innerHTML = appData.criteria.map((item, i) => `
                     <tr class="bg-white/5 text-white">
                         <td class="p-4 ${userProgress[i] ? 'text-green-400 font-bold' : ''}">
-                            ${isMasterMode ? `<input type="text" value="${item.text}" id="text-${i}" class="bg-transparent w-full outline-none">` : `${i+1}. ${item.text}`}
+                            ${window.isMasterMode ? `<input type="text" value="${item.text}" id="text-${i}" class="bg-transparent w-full outline-none">` : `${i+1}. ${item.text}`}
                         </td>
-                        <td class="p-4 text-center ${isMasterMode ? '' : 'hidden'}">
+                        <td class="p-4 text-center ${window.isMasterMode ? '' : 'hidden'}">
                             <input type="number" value="${item.val}" id="val-${i}" class="w-12 text-center bg-black/20 rounded">
                         </td>
                         <td class="p-4 text-center">
-                            ${isMasterMode ? `<button onclick="window.removeItem(${i})" class="text-red-400 text-[10px] font-bold uppercase">Borrar</button>` : `<button onclick="window.toggleCheck(${i})" class="btn-user w-full py-2 rounded-xl text-[10px] font-bold ${userProgress[i] ? 'active' : ''}">${userProgress[i] ? '✓ SI' : 'CUMPLE'}</button>`}
+                            ${window.isMasterMode ? `<button onclick="window.removeItem(${i})" class="text-red-400 text-[10px] font-bold uppercase">Borrar</button>` : `<button onclick="window.toggleCheck(${i})" class="btn-user w-full py-2 rounded-xl text-[10px] font-bold ${userProgress[i] ? 'active' : ''}">${userProgress[i] ? '✓ SI' : 'CUMPLE'}</button>`}
                         </td>
                     </tr>
                 `).join('');
@@ -498,11 +500,11 @@
 
         window.calculate = function() {
             let logrados = 0, max = 0;
-            appData.criteria.forEach((item, i) => { max += item.val; if (!isMasterMode && userProgress[i]) logrados += item.val; });
+            appData.criteria.forEach((item, i) => { max += item.val; if (!window.isMasterMode && userProgress[i]) logrados += item.val; });
             document.getElementById('points-counter').innerText = `${logrados.toFixed(1)} / ${max.toFixed(1)}`;
             const maxGrade = appData.maxGrade || 10;
-            let notaNum = max > 0 && !isMasterMode ? (logrados / max) * maxGrade : 0;
-            let nota = max > 0 && !isMasterMode ? Math.max(1, Math.round(notaNum)) : "-";
+            let notaNum = max > 0 && !window.isMasterMode ? (logrados / max) * maxGrade : 0;
+            let nota = max > 0 && !window.isMasterMode ? Math.max(1, Math.round(notaNum)) : "-";
             
             const gradeBox = document.getElementById('final-grade');
             if (gradeBox) {
