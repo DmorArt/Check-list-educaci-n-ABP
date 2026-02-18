@@ -16,21 +16,23 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // CONFIGURACIÓN MANUAL PARA GITHUB:
-        // Si despliegas en GitHub, pega aquí el objeto JSON de tu configuración de Firebase
-        const manualConfig = null; 
+        /** * CONFIGURACIÓN PARA GITHUB:
+         * Para que el modo docente funcione en GitHub, debes pegar aquí el objeto 
+         * de configuración que te da Firebase (Project Settings > General).
+         */
+        const manualFirebaseConfig = null; 
 
         let firebaseConfig = {};
         try {
-            firebaseConfig = manualConfig || JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            firebaseConfig = manualFirebaseConfig || JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         } catch (e) {
-            console.error("Error al cargar la configuración de Firebase");
+            console.error("No se pudo cargar la configuración de Firebase.");
         }
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
         window.isCloudReady = false;
         
-        if (firebaseConfig.apiKey) {
+        if (firebaseConfig && firebaseConfig.apiKey) {
             const app = initializeApp(firebaseConfig);
             const auth = getAuth(app);
             const db = getFirestore(app);
@@ -44,7 +46,7 @@
                         await signInAnonymously(auth);
                     }
                 } catch (e) {
-                    console.error("Error de autenticación:", e);
+                    console.error("Error en autenticación silenciosa:", e);
                 }
             };
             initAuth();
@@ -54,7 +56,8 @@
             });
         } else {
             window.cloud = null;
-            console.warn("Base de datos no configurada.");
+            window.isCloudReady = true; // Liberar bloqueo aunque no haya nube
+            console.warn("Firebase no detectado. El modo docente requiere configuración manual para GitHub.");
         }
     </script>
 
@@ -78,12 +81,6 @@
             border-radius: 8px; 
             padding: 8px; 
             outline: none;
-            transition: all 0.2s;
-        }
-
-        input.student-input:focus {
-            border-color: #818cf8 !important;
-            box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
         }
         
         .loader {
@@ -110,14 +107,20 @@
     <div id="password-modal" class="fixed inset-0 flex items-center justify-center hidden no-print modal-overlay">
         <div class="bg-slate-800 border-2 border-indigo-500 p-6 rounded-3xl shadow-2xl w-80 text-center text-white">
             <h3 class="header-font text-xl mb-2 uppercase text-white">Acceso Docente</h3>
-            <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Registra un nuevo usuario o inicia sesión</p>
+            
+            <div id="firebase-alert" class="hidden mb-4 p-3 bg-red-900/50 border border-red-500 rounded-xl">
+                <p class="text-[9px] font-bold uppercase text-red-200">⚠️ Error de Configuración</p>
+                <p class="text-[8px] text-red-300">Firebase no configurado. Edita el código para habilitar la nube en GitHub.</p>
+            </div>
+
+            <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Inicia sesión para editar criterios</p>
             <div class="space-y-3 mb-4">
                 <input type="text" id="docente-user-input" class="w-full student-input text-center" placeholder="Usuario">
                 <input type="password" id="docente-pass-input" class="w-full student-input text-center" placeholder="Clave">
             </div>
             <div class="flex gap-2">
                 <button onclick="window.closePassModal()" class="flex-1 bg-white/10 py-2 rounded-xl text-xs font-bold uppercase">Cerrar</button>
-                <button id="login-btn" onclick="window.checkPass()" class="flex-1 bg-indigo-600 py-2 rounded-xl text-xs font-bold uppercase">Entrar</button>
+                <button id="login-btn" onclick="window.checkPass()" class="flex-1 bg-indigo-600 py-2 rounded-xl text-xs font-bold uppercase transition-all">Entrar</button>
             </div>
         </div>
     </div>
@@ -186,10 +189,9 @@
                 <tbody id="criteria-list"></tbody>
             </table>
 
-            <!-- Controles de Edición Docente (Reorganizado) -->
+            <!-- Controles de Edición Docente -->
             <div id="master-controls" class="hidden no-print mt-6 flex flex-col gap-6 border-t border-white/10 pt-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-white">
-                    <!-- Columna 1: Configuración IA -->
                     <div class="bg-black/20 p-5 rounded-3xl border border-indigo-500/10 space-y-4">
                         <h4 class="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] border-b border-white/5 pb-2">Configuración IA</h4>
                         <div class="space-y-3">
@@ -207,7 +209,6 @@
                         </div>
                     </div>
 
-                    <!-- Columna 2: Configuración Académica -->
                     <div class="bg-black/20 p-5 rounded-3xl border border-white/5 space-y-4">
                         <h4 class="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] border-b border-white/5 pb-2">Configuración Académica</h4>
                         <div class="space-y-3">
@@ -276,7 +277,6 @@
             </div>
         </div>
 
-        <!-- Pie -->
         <div class="bg-black/60 p-3 text-center border-t border-white/5 text-white/40">
             <p class="text-[10px] font-bold uppercase tracking-[0.2em]">© Daniel Morisio | Multimodal Godot Evaluator 🔒</p>
         </div>
@@ -333,6 +333,14 @@
         window.openPassModal = () => {
             const btn = document.getElementById('login-btn');
             if(btn) { btn.disabled = false; btn.innerText = "Entrar"; }
+            
+            const alertBox = document.getElementById('firebase-alert');
+            if (!window.cloud) {
+                alertBox.classList.remove('hidden');
+            } else {
+                alertBox.classList.add('hidden');
+            }
+            
             document.getElementById('password-modal').classList.remove('hidden');
         };
         
@@ -379,7 +387,6 @@
                         btn.disabled = false; btn.innerText = "Entrar"; 
                     }
                 } else {
-                    // Nuevo docente
                     await window.cloud.setDoc(docPath, { password: pass, config: appData });
                     window.loginSuccess(user, appData);
                     window.showToast("🎁 Bienvenido, docente registrado.");
