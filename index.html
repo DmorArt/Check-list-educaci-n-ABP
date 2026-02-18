@@ -25,6 +25,7 @@
         }
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
+        window.isCloudReady = false;
         
         if (firebaseConfig.apiKey) {
             const app = initializeApp(firebaseConfig);
@@ -46,10 +47,12 @@
             initAuth();
             onAuthStateChanged(auth, (user) => {
                 window.currentUser = user;
+                window.isCloudReady = true;
             });
         } else {
-            console.warn("Firebase no está configurado. El almacenamiento en la nube no funcionará fuera de este entorno.");
+            console.warn("Firebase no configurado. Entrando en Modo Local.");
             window.cloud = null;
+            window.isCloudReady = true; 
         }
     </script>
 
@@ -105,6 +108,7 @@
     <div id="password-modal" class="fixed inset-0 z-[100] flex items-center justify-center hidden no-print modal-overlay">
         <div class="bg-slate-800 border-2 border-indigo-500 p-6 rounded-3xl shadow-2xl w-80 text-center text-white">
             <h3 class="header-font text-xl mb-4 uppercase text-white">Acceso Docente</h3>
+            <div id="modal-desc" class="text-[10px] text-slate-400 mb-4 uppercase tracking-tighter">Ingresa tus credenciales para editar</div>
             <div class="space-y-3 mb-4">
                 <input type="text" id="docente-user-input" class="w-full student-input text-center" placeholder="Usuario">
                 <input type="password" id="docente-pass-input" class="w-full student-input text-center" placeholder="Clave">
@@ -113,6 +117,7 @@
                 <button onclick="window.closePassModal()" class="flex-1 bg-white/10 py-2 rounded-xl text-xs font-bold uppercase">Cerrar</button>
                 <button id="login-btn" onclick="window.checkPass()" class="flex-1 bg-indigo-600 py-2 rounded-xl text-xs font-bold uppercase">Entrar</button>
             </div>
+            <div id="offline-msg" class="hidden mt-4 text-[9px] text-yellow-500 font-bold uppercase">⚠️ Modo Local: Usuario 'admin' / Clave 'admin'</div>
         </div>
     </div>
 
@@ -145,7 +150,7 @@
             </div>
         </div>
 
-        <!-- Alumno / Cabecera Secundaria Invertida -->
+        <!-- Alumno / Cabecera Secundaria Swapped -->
         <div class="p-6 md:px-10 bg-white/5 border-b border-white/10 flex flex-col md:flex-row items-center justify-center gap-8 text-white">
             <div class="flex flex-col md:flex-row items-center gap-4 md:gap-12">
                 <!-- Grado y Curso a la izquierda -->
@@ -327,6 +332,9 @@
         window.openPassModal = () => {
             const btn = document.getElementById('login-btn');
             if(btn) { btn.disabled = false; btn.innerText = "Entrar"; }
+            if (!window.cloud) {
+                document.getElementById('offline-msg').classList.remove('hidden');
+            }
             document.getElementById('password-modal').classList.remove('hidden');
         };
         
@@ -339,20 +347,34 @@
         };
 
         window.checkPass = async function() {
-            if (!window.cloud) {
-                window.showToast("❌ Error: Firebase no configurado");
-                return;
-            }
             const user = document.getElementById('docente-user-input').value.trim().toLowerCase();
             const pass = document.getElementById('docente-pass-input').value.trim();
             const btn = document.getElementById('login-btn');
             if (!user || !pass) return;
 
-            btn.disabled = true; btn.innerText = "⏳ Verificando...";
+            btn.disabled = true; btn.innerText = "⏳...";
+
+            // Lógica para MODO LOCAL (GitHub / No Firebase)
+            if (!window.cloud) {
+                if (user === "admin" && pass === "admin") {
+                    window.loginSuccess("admin", appData);
+                    window.showToast("🚀 Modo Local Activado (Sin Nube)");
+                } else {
+                    window.showToast("❌ Credenciales locales: admin / admin");
+                    btn.disabled = false; btn.innerText = "Entrar";
+                }
+                return;
+            }
+
+            // Lógica para MODO NUBE (Canvas)
             try {
-                // Aseguramos que estamos autenticados antes de consultar Firestore
-                if (!window.currentUser) {
-                    await window.cloud.auth.currentUser || new Promise(r => setTimeout(r, 1000));
+                // Esperar a que la autenticación inicial se complete si es necesario
+                if (!window.isCloudReady) {
+                    await new Promise(r => {
+                        const check = setInterval(() => {
+                            if(window.isCloudReady) { clearInterval(check); r(); }
+                        }, 100);
+                    });
                 }
                 
                 const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', user);
@@ -472,7 +494,11 @@
         };
 
         window.saveChanges = async () => {
-            if (!window.cloud) return;
+            if (!window.cloud) {
+                window.showToast("⚠️ Modo Local: Cambios solo durante esta sesión");
+                window.render();
+                return;
+            }
             const btn = document.getElementById('save-btn');
             if (btn) { btn.disabled = true; btn.innerText = "⏳..."; }
             appData.title = document.getElementById('edit-title').value;
