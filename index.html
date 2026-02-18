@@ -13,30 +13,44 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__app_id ? __firebase_config : '{}'); 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
+        // Inicialización segura para entornos externos (como GitHub)
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Error al parsear configuración de Firebase");
+        }
 
-        window.cloud = { db, auth, appId, doc, getDoc, setDoc };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
         
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+        if (firebaseConfig.apiKey) {
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            window.cloud = { db, auth, appId, doc, getDoc, setDoc };
+            
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (e) {
+                    console.error("Error crítico de autenticación:", e);
                 }
-            } catch (e) {
-                console.error("Error crítico de autenticación:", e);
-            }
-        };
-        
-        initAuth();
+            };
+            initAuth();
+            onAuthStateChanged(auth, (user) => {
+                window.currentUser = user;
+            });
+        } else {
+            console.warn("Firebase no está configurado. El almacenamiento en la nube no funcionará fuera de este entorno.");
+            window.cloud = null;
+        }
     </script>
 
     <style>
@@ -131,10 +145,15 @@
             </div>
         </div>
 
-        <!-- Alumno / Cabecera Secundaria Swapped -->
+        <!-- Alumno / Cabecera Secundaria Invertida -->
         <div class="p-6 md:px-10 bg-white/5 border-b border-white/10 flex flex-col md:flex-row items-center justify-center gap-8 text-white">
-            <div class="flex flex-col md:flex-row-reverse items-center gap-4 md:gap-12">
-                <!-- Swapped: Name Inputs at Right -->
+            <div class="flex flex-col md:flex-row items-center gap-4 md:gap-12">
+                <!-- Grado y Curso a la izquierda -->
+                <div class="flex flex-row items-center justify-center border-r md:border-r border-white/10 pr-4 md:pr-12 min-w-[150px] gap-3">
+                    <span id="display-grade" class="header-font text-5xl text-yellow-400">1º</span>
+                    <span id="display-course" class="header-font text-3xl text-white uppercase">EBI</span>
+                </div>
+                <!-- Nombre y Apellido a la derecha -->
                 <div class="flex gap-4">
                     <div class="w-24 md:w-32">
                         <label class="block text-[9px] uppercase font-black text-indigo-300 mb-1 ml-1">Nombre</label>
@@ -144,11 +163,6 @@
                         <label class="block text-[9px] uppercase font-black text-indigo-300 mb-1 ml-1">Apellido</label>
                         <input type="text" id="student-surname" placeholder="Apellido" class="student-input w-full text-[11px] py-1.5 shadow-inner">
                     </div>
-                </div>
-                <!-- Swapped: Grade Display at Left -->
-                <div class="flex flex-row items-center justify-center border-r md:border-r border-white/10 pr-4 md:pr-12 min-w-[150px] gap-3">
-                    <span id="display-grade" class="header-font text-5xl text-yellow-400">1º</span>
-                    <span id="display-course" class="header-font text-3xl text-white uppercase">EBI</span>
                 </div>
             </div>
         </div>
@@ -166,10 +180,10 @@
                 <tbody id="criteria-list"></tbody>
             </table>
 
-            <!-- Controles de Edición Docente (Reorganized) -->
+            <!-- Controles de Edición Docente (Reorganizado) -->
             <div id="master-controls" class="hidden no-print mt-6 flex flex-col gap-6 border-t border-white/10 pt-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-white">
-                    <!-- Column 1: AI Config -->
+                    <!-- Columna 1: Configuración IA -->
                     <div class="bg-black/20 p-4 rounded-2xl border border-white/5 space-y-4">
                         <h4 class="text-[10px] font-black text-indigo-300 uppercase tracking-widest border-b border-white/10 pb-2">Configuración IA</h4>
                         <div class="grid grid-cols-1 gap-3">
@@ -187,7 +201,7 @@
                         </div>
                     </div>
 
-                    <!-- Column 2: Academic Config -->
+                    <!-- Columna 2: Configuración Académica -->
                     <div class="bg-black/20 p-4 rounded-2xl border border-white/5 space-y-4">
                         <h4 class="text-[10px] font-black text-indigo-300 uppercase tracking-widest border-b border-white/10 pb-2">Configuración Académica</h4>
                         <div class="grid grid-cols-1 gap-3">
@@ -310,22 +324,25 @@
             if (el) el.innerText = `FECHA: ${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
         };
 
-        window.openPassModal = () => document.getElementById('password-modal').classList.remove('hidden');
+        window.openPassModal = () => {
+            const btn = document.getElementById('login-btn');
+            if(btn) { btn.disabled = false; btn.innerText = "Entrar"; }
+            document.getElementById('password-modal').classList.remove('hidden');
+        };
         
         window.closePassModal = () => {
             document.getElementById('password-modal').classList.add('hidden');
             document.getElementById('docente-user-input').value = "";
             document.getElementById('docente-pass-input').value = "";
-            
-            // Fix: Reset button state
             const btn = document.getElementById('login-btn');
-            if(btn) {
-                btn.disabled = false;
-                btn.innerText = "Entrar";
-            }
+            if(btn) { btn.disabled = false; btn.innerText = "Entrar"; }
         };
 
         window.checkPass = async function() {
+            if (!window.cloud) {
+                window.showToast("❌ Error: Firebase no configurado");
+                return;
+            }
             const user = document.getElementById('docente-user-input').value.trim().toLowerCase();
             const pass = document.getElementById('docente-pass-input').value.trim();
             const btn = document.getElementById('login-btn');
@@ -333,12 +350,19 @@
 
             btn.disabled = true; btn.innerText = "⏳ Verificando...";
             try {
+                // Aseguramos que estamos autenticados antes de consultar Firestore
+                if (!window.currentUser) {
+                    await window.cloud.auth.currentUser || new Promise(r => setTimeout(r, 1000));
+                }
+                
                 const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', user);
                 const snapshot = await window.cloud.getDoc(docPath);
+                
                 if (snapshot.exists()) {
                     const data = snapshot.data();
-                    if (data.password === pass) window.loginSuccess(user, data.config || appData);
-                    else { 
+                    if (data.password === pass) {
+                        window.loginSuccess(user, data.config || appData);
+                    } else { 
                         window.showToast("❌ Clave incorrecta"); 
                         btn.disabled = false; btn.innerText = "Entrar"; 
                     }
@@ -349,7 +373,7 @@
                 }
             } catch (e) {
                 console.error(e);
-                window.showToast("❌ Error de nube");
+                window.showToast("❌ Error de conexión");
                 btn.disabled = false; btn.innerText = "Entrar";
             }
         };
@@ -448,6 +472,7 @@
         };
 
         window.saveChanges = async () => {
+            if (!window.cloud) return;
             const btn = document.getElementById('save-btn');
             if (btn) { btn.disabled = true; btn.innerText = "⏳..."; }
             appData.title = document.getElementById('edit-title').value;
@@ -474,7 +499,6 @@
             const key = appData.geminiKey || apiKeyDefault;
             const modelId = "gemini-2.5-flash-preview-09-2025";
             const delays = [1000, 2000, 4000, 8000, 16000];
-
             for (let i = 0; i < delays.length; i++) {
                 try {
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
@@ -483,21 +507,13 @@
                         headers: {'Content-Type': 'application/json'}, 
                         body: JSON.stringify({ contents: [{ parts: [{ text: query }] }] }) 
                     });
-                    
-                    if (res.status === 429) {
-                        if (i < delays.length - 1) {
-                            await new Promise(r => setTimeout(r, delays[i]));
-                            continue;
-                        }
+                    if (res.status === 429 && i < delays.length - 1) {
+                        await new Promise(r => setTimeout(r, delays[i])); continue;
                     }
-                    
                     if (!res.ok) throw new Error("IA_ERROR");
                     const data = await res.json();
                     return data.candidates?.[0]?.content?.parts?.[0]?.text;
-                } catch (e) {
-                    if (i === delays.length - 1) throw e;
-                    await new Promise(r => setTimeout(r, 1000));
-                }
+                } catch (e) { if (i === delays.length - 1) throw e; await new Promise(r => setTimeout(r, 1000)); }
             }
         };
 
@@ -505,26 +521,16 @@
             const key = appData.geminiKey; 
             const modelId = "llama-3.3-70b-versatile";
             const url = "https://api.groq.com/openai/v1/chat/completions";
-            
             try {
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: { 
-                        'Authorization': `Bearer ${key}`, 
-                        'Content-Type': 'application/json' 
-                    },
-                    body: JSON.stringify({
-                        model: modelId,
-                        messages: [{ role: "user", content: query }],
-                        temperature: 0.7
-                    })
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: query }], temperature: 0.7 })
                 });
                 if (!res.ok) throw new Error("GROQ_ERROR");
                 const data = await res.json();
                 return data.choices?.[0]?.message?.content;
-            } catch (e) {
-                throw e;
-            }
+            } catch (e) { throw e; }
         };
 
         window.generateAIReport = async function(type) {
@@ -532,90 +538,38 @@
             const output = document.getElementById('ai-output');
             const loader = document.getElementById('ai-loader');
             const header = document.getElementById('ai-header-title');
-
             if (section) section.classList.remove('hidden');
             if (loader) loader.classList.remove('hidden');
-            
             if (header) header.innerText = type === 'tips' ? "Tips Técnicos IA ✨" : "Informe Pedagógico IA ✨";
             if (output) output.innerText = "Consultando a la IA...";
-
             const alumno = {
                 nombre: document.getElementById('student-name').value || "[Nombre]",
                 apellido: document.getElementById('student-surname').value || "[Apellido]",
                 grado: appData.grade,
                 curso: appData.courseType
             };
-
             const cumplidos = appData.criteria.filter((_, i) => userProgress[i]).map(c => c.text);
             const pendientes = appData.criteria.filter((_, i) => !userProgress[i]).map(c => c.text);
             const nota = document.getElementById('final-grade').innerText;
-
             let prompt = "";
             if (type === 'tips') {
-                prompt = `Instrucción:
-Analiza el siguiente checklist de evaluación del proyecto de Godot Engine del alumno y enfócate ÚNICAMENTE en los objetivos que NO han sido alcanzados.
-
-Objetivos no logrados ( Checklist ):
-${pendientes.map((p, idx) => `${idx + 1}. ${p}`).join('\n')}
-
-Tu tarea:
-Para CADA uno de estos objetivos no logrados, genera un tip de mejora concreto, técnico y accionable en el motor Godot Engine. Explica el nodo, el script o el procedimiento necesario para resolverlo.
-
-Criterios para los tips:
-1. Deben ser específicos para Godot (ej. usa un nodo RayCast2D para detectar colisiones).
-2. Indica claramente QUÉ hacer y CÓMO hacerlo.
-3. Evita consejos genéricos. Sé directo y técnico.
-4. Redactar cada tip en una sola frase potente.
-5. SEPARA cada tip con un salto de línea claro.
-6. Presentar la respuesta ESTRICTAMENTE en este formato para cada tip:
-→ [Nombre del Criterio]: Tip sugerido
-
-Responde solo con los tips, sin introducciones ni despedidas ni Markdown.`;
+                prompt = `Instrucción: Analiza el siguiente checklist de Godot Engine del alumno y enfócate ÚNICAMENTE en los objetivos que NO han sido alcanzados. Objetivos no logrados:\n${pendientes.map((p, idx) => `${idx + 1}. ${p}`).join('\n')}\nTarea: Para CADA uno genera un tip técnico específico para Godot. Formato:\n→ [Criterio]: Tip sugerido\nResponde solo tips separados por saltos de línea.`;
             } else {
-                prompt = `Genera un informe pedagógico para el alumno: ${alumno.nombre} ${alumno.apellido} del curso ${alumno.grado} ${alumno.curso}.
-Proyecto: ${appData.title}. Nota: ${nota}/${appData.maxGrade}. 
-Logros detectados: ${cumplidos.join(', ')}.
-Aspectos pendientes: ${pendientes.join(', ')}.
-
-Tu respuesta DEBE seguir ESTRICTAMENTE esta estructura:
-${alumno.nombre} ${alumno.apellido} ${alumno.grado} ${alumno.curso}
-
-Resumen:
-El proyecto presenta un desarrollo adecuado, evidenciando la aplicación de los contenidos trabajados y el cumplimiento de los objetivos principales. [Adapta brevemente según el desempeño].
-
-Logros:
-Se observa una correcta implementación de las tareas propuestas, organización del trabajo y funcionalidad general del producto desarrollado basándote en: ${cumplidos.join(', ')}.
-
-Aspectos a mejorar:
-Se recomienda profundizar en el nivel de detalle técnico, optimizar la presentación del proyecto y continuar incorporando mejoras funcionales y creativas basándote en: ${pendientes.join(', ')}.
-
-Conclusión:
-El trabajo demuestra avances significativos en el aprendizaje y, con los ajustes sugeridos, podrá alcanzar un nivel superior de calidad.
-
-Responde solo con el texto plano, sin negritas ni Markdown.`;
+                prompt = `Genera un informe pedagógico para el alumno: ${alumno.nombre} ${alumno.apellido} del curso ${alumno.grado} ${alumno.curso}. Proyecto: ${appData.title}. Nota: ${nota}/${appData.maxGrade}. Logros: ${cumplidos.join(', ')}. Pendientes: ${pendientes.join(', ')}.\nEstructura:\n${alumno.nombre} ${alumno.apellido} ${alumno.grado} ${alumno.curso}\nResumen: [Texto]\nLogros: [Texto]\nAspectos a mejorar: [Texto]\nConclusión: [Texto]\nSolo texto plano.`;
             }
-
             try {
                 let text = "";
-                if (appData.aiEngine === 'groq') {
-                    text = await window.callGroq(prompt);
-                } else {
-                    text = await window.callGemini(prompt);
-                }
+                if (appData.aiEngine === 'groq') text = await window.callGroq(prompt);
+                else text = await window.callGemini(prompt);
                 if (output) output.innerText = text;
             } catch (e) {
-                if (output) output.innerText = "❌ Error: Límite de cuota excedido o API Key inválida. Verifica tu configuración en el panel Docente.";
-            } finally {
-                if (loader) loader.classList.add('hidden');
-            }
+                if (output) output.innerText = "❌ Error: Límite de cuota excedido o API Key inválida.";
+            } finally { if (loader) loader.classList.add('hidden'); }
         };
 
         window.showToast = (msg) => {
             const t = document.getElementById('toast');
-            if (t) {
-                t.innerText = msg; t.style.opacity = '1';
-                setTimeout(() => t.style.opacity = '0', 3000);
-            }
+            if (t) { t.innerText = msg; t.style.opacity = '1'; setTimeout(() => t.style.opacity = '0', 3000); }
         };
 
         window.handlePrint = () => setTimeout(() => window.print(), 300);
@@ -627,47 +581,32 @@ Responde solo con el texto plano, sin negritas ni Markdown.`;
             const course = document.getElementById('display-course').innerText;
             const finalGrade = document.getElementById('final-grade').innerText;
             const totalPoints = document.getElementById('points-counter').innerText;
-
             const data = [
-                ["INFORME DE EVALUACIÓN - PROYECTO GODOT"],
-                [""],
+                ["INFORME DE EVALUACIÓN - PROYECTO GODOT"], [""],
                 ["Alumno:", `${name} ${surname}`.trim()],
                 ["Grado y Curso:", `${grade} ${course}`],
-                ["Fecha de Evaluación:", new Date().toLocaleDateString()],
-                ["Puntaje Obtenido:", totalPoints],
-                ["Nota Final:", finalGrade],
-                [""],
+                ["Fecha:", new Date().toLocaleDateString()],
+                ["Puntaje:", totalPoints], ["Nota Final:", finalGrade], [""],
                 ["DETALLE DE CRITERIOS", "VALOR", "ESTADO"]
             ];
-
             appData.criteria.forEach((item, i) => {
-                data.push([
-                    item.text,
-                    item.val,
-                    userProgress[i] ? "CUMPLE" : "NO CUMPLE"
-                ]);
+                data.push([item.text, item.val, userProgress[i] ? "CUMPLE" : "NO CUMPLE"]);
             });
-
             const ws = XLSX.utils.aoa_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Resultado");
             XLSX.writeFile(wb, `Evaluacion_${name}_${surname}.xlsx`.replace(/\s+/g, '_'));
-            window.showToast("📊 Excel descargado con éxito");
+            window.showToast("📊 Excel descargado");
         };
 
         window.shareResults = async () => {
             const grade = document.getElementById('final-grade');
             const text = `🎮 Proyecto Godot\n⭐ Nota: ${grade ? grade.innerText : "-"}/${appData.maxGrade}`;
-            if (navigator.share) {
-                try { await navigator.share({ title: 'Evaluación Godot', text: text }); } catch(e) {}
-            } else { window.showToast("📋 Usa el botón Imprimir"); }
+            if (navigator.share) { try { await navigator.share({ title: 'Evaluación Godot', text: text }); } catch(e) {} } 
+            else { window.showToast("📋 Usa el botón Imprimir"); }
         };
 
-        window.onload = () => { 
-            window.setDate(); 
-            userProgress = new Array(appData.criteria.length).fill(false); 
-            window.render(); 
-        };
+        window.onload = () => { window.setDate(); userProgress = new Array(appData.criteria.length).fill(false); window.render(); };
     </script>
 </body>
 </html>
