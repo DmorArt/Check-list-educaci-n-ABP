@@ -26,7 +26,7 @@
         try {
             firebaseConfig = manualFirebaseConfig || JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         } catch (e) {
-            console.error("FVersion libre test.");
+            console.error("Version libre test.");
         }
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
@@ -124,8 +124,8 @@
             <h3 class="header-font text-xl mb-2 uppercase text-white">Acceso Docente</h3>
             
             <div id="offline-notice" class="hidden mb-4 p-3 bg-yellow-900/40 border border-yellow-600 rounded-xl">
-                <p class="text-[9px] font-bold uppercase text-yellow-200">ℹ️ Modo Sesión (Sin Nube)</p>
-                <p class="text-[8px] text-yellow-300">Sin Firebase, los datos se perderán al recargar. Configura Firebase para guardarlos.</p>
+                <p class="text-[9px] font-bold uppercase text-yellow-200">Modo Sesión Nube</p>
+                <p class="text-[8px] text-yellow-300">los datos se perderán al recargar.</p>
             </div>
 
             <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Identifícate para editar criterios</p>
@@ -207,7 +207,7 @@
             <!-- Controles de Edición Docente -->
             <div id="master-controls" class="hidden no-print mt-6 flex flex-col gap-6 border-t border-white/10 pt-6">
                 <div id="sync-warning" class="hidden bg-yellow-500/10 border border-yellow-500/50 p-3 rounded-xl mb-4 text-center">
-                    <p class="text-[10px] text-yellow-200 uppercase font-bold tracking-widest">⚠️ Modo Sesión: Los cambios NO se guardarán al recargar.</p>
+                    <p class="text-[10px] text-yellow-200 uppercase font-bold tracking-widest">⚠️ Modo Sesión Libre: Los cambios NO se guardarán al recargar.</p>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-white">
