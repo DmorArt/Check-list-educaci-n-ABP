@@ -16,8 +16,9 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        /** * CONFIGURACIÓN PARA GITHUB:
-         * Si deseas que los datos se guarden permanentemente, pega aquí tu objeto de Firebase.
+        /** * 🚀 SOLUCIÓN PARA PERSISTENCIA EN GITHUB:
+         * Para que tus datos NO se borren al recargar, debes crear un proyecto en 
+         * firebase.google.com y pegar aquí tu configuración:
          */
         const manualFirebaseConfig = null; 
 
@@ -25,7 +26,7 @@
         try {
             firebaseConfig = manualFirebaseConfig || JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         } catch (e) {
-            console.error("Entorno sin configuración automática de Firebase.");
+            console.error("Version libre test.");
         }
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'evaluador-godot';
@@ -49,15 +50,29 @@
                 }
             };
             initAuth();
-            onAuthStateChanged(auth, (user) => {
+
+            onAuthStateChanged(auth, async (user) => {
                 window.currentUser = user;
                 window.isCloudReady = true;
+                
+                // Intentar recuperar sesión de docente si existía
+                const lastUser = sessionStorage.getItem('last_docente_user');
+                if (lastUser && !isMasterMode) {
+                    console.log("Recuperando sesión previa de:", lastUser);
+                    try {
+                        const docPath = doc(db, 'artifacts', appId, 'public', 'data', 'docentes', lastUser.toLowerCase());
+                        const snap = await getDoc(docPath);
+                        if (snap.exists()) {
+                            window.loginSuccess(lastUser, snap.data().config);
+                        }
+                    } catch (err) {
+                        console.error("Error recuperando sesión:", err);
+                    }
+                }
             });
         } else {
-            // Fallback para GitHub: No hay nube, pero permitimos flujo local
             window.cloud = null;
             window.isCloudReady = true; 
-            console.warn("Ejecutando en Modo de Sesión (Sin persistencia en la nube).");
         }
     </script>
 
@@ -110,7 +125,7 @@
             
             <div id="offline-notice" class="hidden mb-4 p-3 bg-yellow-900/40 border border-yellow-600 rounded-xl">
                 <p class="text-[9px] font-bold uppercase text-yellow-200">ℹ️ Modo Sesión (Sin Nube)</p>
-                <p class="text-[8px] text-yellow-300">Cualquier clave funciona. Los cambios no se guardarán al recargar.</p>
+                <p class="text-[8px] text-yellow-300">Sin Firebase, los datos se perderán al recargar. Configura Firebase para guardarlos.</p>
             </div>
 
             <p class="text-[9px] text-slate-400 mb-6 uppercase tracking-wider">Identifícate para editar criterios</p>
@@ -187,10 +202,10 @@
                 <tbody id="criteria-list"></tbody>
             </table>
 
-            <!-- Controles de Edición Docente (Reorganizado) -->
+            <!-- Controles de Edición Docente -->
             <div id="master-controls" class="hidden no-print mt-6 flex flex-col gap-6 border-t border-white/10 pt-6">
                 <div id="sync-warning" class="hidden bg-yellow-500/10 border border-yellow-500/50 p-3 rounded-xl mb-4 text-center">
-                    <p class="text-[10px] text-yellow-200 uppercase font-bold tracking-widest">⚠️ Modo Sesión: Los cambios no se sincronizarán en la nube.</p>
+                    <p class="text-[10px] text-yellow-200 uppercase font-bold tracking-widest">⚠️ Modo Sesión: Los cambios NO se guardarán al recargar.</p>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-white">
@@ -245,7 +260,7 @@
                 </div>
                 <div class="flex gap-3 justify-center w-full">
                     <button onclick="window.addItem()" class="bg-blue-600 px-6 py-2.5 rounded-2xl font-bold text-xs hover:bg-blue-500 transition-colors">+ AÑADIR CRITERIO</button>
-                    <button onclick="window.saveChanges()" id="save-btn" class="bg-green-600 px-8 py-2.5 rounded-2xl font-bold text-xs shadow-xl hover:bg-green-500 transition-colors">💾 GUARDAR CONFIGURACIÓN</button>
+                    <button onclick="window.saveChanges()" id="save-btn" class="bg-green-600 px-8 py-2.5 rounded-2xl font-bold text-xs shadow-xl hover:bg-green-500 transition-colors">💾 GUARDAR EN LA NUBE</button>
                 </div>
             </div>
         </div>
@@ -363,14 +378,13 @@
 
             btn.disabled = true; btn.innerText = "⏳ Verificando...";
 
-            // LÓGICA DE GITHUB (SIN NUBE)
             if (!window.cloud) {
+                // Modo sesión sin persistencia real en nube
                 window.loginSuccess(user || "Docente Temporal", appData);
-                window.showToast("🚀 Modo Sesión: Edita libremente, exporta a Excel o Imprime.");
+                window.showToast("🚀 Modo Sesión activado.");
                 return;
             }
 
-            // LÓGICA DE NUBE (CANVAS)
             try {
                 if (!window.isCloudReady) {
                     await new Promise(r => {
@@ -387,6 +401,8 @@
                     const data = snapshot.data();
                     if (data.password === pass) {
                         window.loginSuccess(user, data.config || appData);
+                        // Recordar usuario en esta sesión del navegador
+                        sessionStorage.setItem('last_docente_user', user);
                     } else { 
                         window.showToast("❌ Clave incorrecta"); 
                         btn.disabled = false; btn.innerText = "Entrar"; 
@@ -394,6 +410,7 @@
                 } else {
                     await window.cloud.setDoc(docPath, { password: pass, config: appData });
                     window.loginSuccess(user, appData);
+                    sessionStorage.setItem('last_docente_user', user);
                     window.showToast("🎁 Bienvenido, docente registrado.");
                 }
             } catch (e) {
@@ -416,6 +433,7 @@
         window.changeToUser = () => { 
             isMasterMode = false; 
             currentDocente = null; 
+            sessionStorage.removeItem('last_docente_user');
             window.updateUI(); 
             window.showToast("👤 Modo Alumno"); 
         };
@@ -503,7 +521,7 @@
         window.saveChanges = async () => {
             if (!window.cloud) {
                 window.showToast("⚠️ Modo Sesión: Los cambios se mantienen solo mientras la pestaña esté abierta.");
-                // Actualizar visualmente
+                // Actualizar visualmente para la sesión actual
                 appData.title = document.getElementById('edit-title').value;
                 appData.maxGrade = parseInt(document.getElementById('edit-max-grade-select').value);
                 appData.grade = document.getElementById('edit-grade-select').value;
@@ -521,6 +539,7 @@
             }
             const btn = document.getElementById('save-btn');
             if (btn) { btn.disabled = true; btn.innerText = "⏳ Guardando..."; }
+            
             appData.title = document.getElementById('edit-title').value;
             appData.maxGrade = parseInt(document.getElementById('edit-max-grade-select').value);
             appData.grade = document.getElementById('edit-grade-select').value;
@@ -533,13 +552,14 @@
                 if (textInput) item.text = textInput.value;
                 if (valInput) item.val = parseFloat(valInput.value);
             });
+            
             try {
                 const docPath = window.cloud.doc(window.cloud.db, 'artifacts', window.cloud.appId, 'public', 'data', 'docentes', currentDocente.toLowerCase());
                 await window.cloud.setDoc(docPath, { config: appData }, { merge: true });
                 window.showToast("✅ Configuración guardada en la nube.");
                 window.render();
             } catch (e) { window.showToast("❌ Error al guardar."); } 
-            finally { if (btn) { btn.disabled = false; btn.innerText = "💾 GUARDAR CONFIGURACIÓN"; } }
+            finally { if (btn) { btn.disabled = false; btn.innerText = "💾 GUARDAR EN LA NUBE"; } }
         };
 
         window.callGemini = async (query) => {
